@@ -1,13 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import LandingPage from './components/landingpage';
+import Gamepage from './components/Gamepage';
 
-import './style.css';
 
 function App() {
   
 
   return (
-   <div>
-   </div>
+   <BrowserRouter>
+   <Routes>
+    <Route path='/' element={<LandingPage></LandingPage>}> </Route>
+    <Route path='/game' element={<Gamepage></Gamepage>}></Route>
+   </Routes>
+   
+   </BrowserRouter>
   );
 }
 
