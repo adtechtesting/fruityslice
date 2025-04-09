@@ -62,7 +62,10 @@ export default function LandingPage() {
             <div className="bg-gradient-to-br from-yellow-500 to-yellow-700 p-6 rounded-xl shadow-lg transform transition-transform hover:scale-105">
               <div className="text-4xl mb-3">🏆</div>
               <h3 className="text-lg font-bold mb-2">Compete</h3>
-              <p>Challenge friends on the global leaderboard for bigger prizes</p>
+              <p>Challenge friends on the global leaderboard for bigger prizes.
+             
+            <p className='text-blue-100 text-xs'>comming soon</p>
+              </p>
             </div>
           </div>
         </div>
@@ -71,7 +74,7 @@ export default function LandingPage() {
           <button onClick={()=>{
                 router("/game")
           }}
-            className={`px-12 py-5 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 rounded-xl font-pixel text-2xl shadow-xl transform transition-all duration-300 ${isHovering ? 'scale-110 shadow-green-500/50' : 'scale-100'}`}
+            className={`px-12 py-5 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 rounded-xl font-pixel text-2xl shadow-xl transform transition-all duration-300 ${isHovering ? 'scale-110 shadow-green-500/50 cursor-pointer' : 'scale-100'}`}
             onMouseEnter={() => setIsHovering(true)}
             onMouseLeave={() => setIsHovering(false)}
           >

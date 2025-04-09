@@ -7,7 +7,8 @@ import { Connection, Keypair, PublicKey, Transaction } from '@solana/web3.js';
 import jwt from "jsonwebtoken"
 import { ASSOCIATED_TOKEN_PROGRAM_ID, createAssociatedTokenAccountInstruction, createTransferInstruction, getAssociatedTokenAddress, TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import crypto from "crypto"
-import { timeStamp } from 'console';
+import nacl from 'tweetnacl';
+
 
 dotenv.config();
 
@@ -18,7 +19,7 @@ const TOKEN_MINT=new PublicKey("");
 const PAYER=Keypair.fromSecretKey(bs58.decode(process.env.PAYER_WALLET));
 const HOUSE_WALLET=PAYER.publicKey;
 const JWT_SECRET=process.env.JWT_SECRET
-
+const JWT_EXPIRY=process.env.JWT_EXPIRY
 const authtoken=process.env.AUTH_TOKEN;
 const specialrewardClaimed=new Set()    //we store the address that claimed special rewards
 
@@ -66,7 +67,7 @@ function getSliceRewards(score,playerAddress){
 
  
 
-async function getorCreateAssociatedTokenAccount(){
+async function getorCreateAssociatedTokenAccount(owner){
   try {
     
   
@@ -85,7 +86,7 @@ async function getorCreateAssociatedTokenAccount(){
   } catch (error) {
 const transaction=new Transaction().add(
   createAssociatedTokenAccountInstruction(
-    PAYER_WALLET.publicKey,
+    PAYER.publicKey,
     associatedtoken,
     owner,
     TOKEN_MINT,
@@ -135,7 +136,7 @@ app.post("/api/transfer-tokens",async (req,res)=>{
     const {playerAddress,score}=req.body;
 
     if(!playerAddress || !score ){
-      res.status.json({message:"player add not found"})
+      res.status(400).json({message:"player add not found"})
       return
     }
 
@@ -161,11 +162,11 @@ app.post("/api/transfer-tokens",async (req,res)=>{
       }
 
 
-      const transaction=await Transaction().add(
+      const transaction=new Transaction().add(
         createTransferInstruction(
           housetokenAccount,
           palyertokenAccount,
-          owner,
+          PAYER.publicKey,
           amount * 10 ** 6 
 
         )
@@ -202,11 +203,11 @@ app.post("/api/transfer-tokens",async (req,res)=>{
 })
 
 
-const nouncestore=new Map()
+const noncestore=new Map()
 const EXPIRY_TIME_NOUNCE=5 * 60 *1000;
 
 
-app.post("/api/get-nounce",(req,res)=>{
+app.post("/api/get-nonce",(req,res)=>{
   try {
     const requestauthtoken=req.headers["authorization"]
 
@@ -219,15 +220,15 @@ app.post("/api/get-nounce",(req,res)=>{
 
     //generate a random nounce 
 
-    const nounce= crypto.randomBytes(32).toString('hex')
-    nouncestore.set(nounce,{
+    const nonce= crypto.randomBytes(32).toString('hex')
+    noncestore.set(nonce,{
       timeStamp:Date.now(),
       used:false
     })
     
 
 
-    for(const[storenounce,data] of nouncestore.entries()){
+    for(const[storenounce,data] of noncestore.entries()){
       if(Date.now() - data.timestamp > EXPIRY_TIME_NOUNCE){
         nouncestore.delete(storenounce)
       }
@@ -236,9 +237,80 @@ app.post("/api/get-nounce",(req,res)=>{
 
     res.json({
       success:true,
-      nounce,
+      nonce,
       expiresin:EXPIRY_TIME_NOUNCE
     })
+  } catch (error) {
+    console.log(error)
+  }
+})
+
+app.post("/api/verify-wallet",async(req,res)=>{
+
+  try {
+    const {signature,publicKey,message,nonce}=req.body;
+
+    if(!signature || !publicKey || !message || !nonce) {
+      res.status(400).json({message:"missing parameters"})
+      return 
+    }
+
+    const noncedata=noncestore.get(nonce);
+    if(!noncedata){
+      res.status(400).json({message:"invalid nonce"})
+      return 
+    }
+
+    //now we check the nonce is experied
+
+    if(Date.now()-noncedata.timestamp > EXPIRY_TIME_NOUNCE){
+      noncestore.delete(nonce)
+      res.status(400).json({message:"expired"})
+      return 
+    }
+    
+    if(noncedata.used){
+      res.status(400).json({message:"data  used"})
+      return 
+    }
+     
+    const messageBytes=new TextEncoder().encode(message)
+     
+
+    const signatureBytes=new Uint8Array(
+      Buffer.from(signature,"base64")
+    );
+
+
+    const publickeybytes=new PublicKey(publicKey).toBytes()
+
+
+    const verified=nacl.sign.detached.verify(
+      messageBytes,
+      signatureBytes,
+      publickeybytes
+    )
+
+    if(!verified){
+      res.status(401).json({message:"invalid signature"})
+    }
+
+    noncedata.used=true
+
+
+    const token=jwt.sign({
+      publicKey,
+      wallet:publicKey
+    },
+  JWT_SECRET,{
+    expiresIn:JWT_EXPIRY
+  })
+
+
+  res.json({
+    success:true,
+    token
+  });
   } catch (error) {
     console.log(error)
   }
