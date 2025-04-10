@@ -38,7 +38,7 @@ export default function Gamepage() {
         try {
             const signature = await connection.requestAirdrop(
                 publicKey,
-                LAMPORTS_PER_SOL // Request 1 SOL
+                LAMPORTS_PER_SOL 
             );
             await connection.confirmTransaction(signature);
             await fetchBalance(publicKey.toString());
@@ -76,7 +76,7 @@ export default function Gamepage() {
                 ))}
             </div>
 
-            <div className="container mx-auto px-4 relative z-10">
+            <div className="max-h-full w-full mx-auto px-4 relative z-10">
                 <header className="py-6 border-b border-white border-opacity-20">
                     <div className="flex flex-col md:flex-row justify-between items-center">
                         <h1 className="text-3xl font-bold mb-4 md:mb-0 text-yellow-400 drop-shadow-lg font-pixel">Fruity Slice</h1>
@@ -113,7 +113,7 @@ export default function Gamepage() {
                     </div>
                 </header>
                 
-                <main className="py-8">
+                <main className="py-8 max-h-96">
                     <GameBuild isWalletConnected={!!publicKey} sendTransaction={sendTransaction} />
                 </main>
                 

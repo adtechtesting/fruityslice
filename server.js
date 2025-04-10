@@ -3,7 +3,7 @@ import bs58 from "bs58"
 import dotenv from 'dotenv';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
-import { Connection, Keypair, PublicKey, Transaction } from '@solana/web3.js';
+import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, Transaction } from '@solana/web3.js';
 import jwt from "jsonwebtoken"
 import { ASSOCIATED_TOKEN_PROGRAM_ID, createAssociatedTokenAccountInstruction, createTransferInstruction, getAssociatedTokenAddress, TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import crypto from "crypto"
@@ -15,7 +15,7 @@ dotenv.config();
 const app = express();
 const connection=new Connection(process.env.RPC || "https://api.devnet.solana.com")
 
-const TOKEN_MINT=new PublicKey("");
+const TOKEN_MINT=new PublicKey("7vXhVju7VpZGh62C4DjVy6pTgkAGubRHtXwHbKqTz6iT");
 const PAYER=Keypair.fromSecretKey(bs58.decode(process.env.PAYER_WALLET));
 const HOUSE_WALLET=PAYER.publicKey;
 const JWT_SECRET=process.env.JWT_SECRET
@@ -51,16 +51,11 @@ function getSliceRewards(score,playerAddress){
       specialrewardClaimed.add(playerAddress)
       return 50000
     }
-
-    if(score < 20) return 0; 
-    if (score < 40) return 500;
-    if(score < 60) return 1000;
-    if (score < 80 )  return 1500;
-    if (score< 100 ) return 2000;
-    if(score < 120) return 3000
-
-    return 6000;
-
+    if (score < 10) return 0; // Minimum score required
+    if (score < 20) return 0.005 * LAMPORTS_PER_SOL; // 0.005 SOL
+    if (score < 50) return 0.01 * LAMPORTS_PER_SOL; // 0.01 SOL
+    if (score < 100) return 0.03 * LAMPORTS_PER_SOL; // 0.03 SOL
+    return 0.05 * LAMPORTS_PER_SOL; // 0.05 SOL for top scores
 
   
 }

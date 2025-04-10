@@ -1,6 +1,5 @@
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useEffect, useRef, useState } from "react";
-import axios from "axios";
 import { Game as GameLogic } from "../lib/game";
 import {
   LAMPORTS_PER_SOL,
@@ -10,19 +9,17 @@ import {
 } from "@solana/web3.js";
 import { connection } from "../lib/constant";
 import { transferTokens, getSliceReward } from "../lib/token";
-const BACKEND_URL = process.env.VITE_BACKEND || "http://localhost:3001";
 
-const HOUSE_ADDRESS = ""; 
-const CONTRACT_ADDRESS = ""; 
+
+const HOUSE_ADDRESS = "32STPfgoC994puyF7LmqqrSUKZg6bhqFC7ekoxNQLFtN";
 
 const GameBuild = ({ isWalletConnected = false, sendTransaction }) => {
   const { publicKey, signMessage } = useWallet();
 
   const [gamestate, setgamestate] = useState({ score: 0, lives: 3, isPlaying: false });
-  const [copystatus, setcopystatus] = useState({ house: false, contract: false });
+  const [copystatus, setcopystatus] = useState({ house: false });
   const [isProcessing, setIsProcessing] = useState(false);
   const [rewardstatus, setrewardStaus] = useState({ loading: false, success: false, error: null });
-
   const [currentscreen, setcurrentscreen] = useState("start");
   const [isClaimed, setIsClaimed] = useState(false);
   const [isClaimProcessing, setIsClaimProcessing] = useState(false);
@@ -31,9 +28,11 @@ const GameBuild = ({ isWalletConnected = false, sendTransaction }) => {
   const gameinstanceRef = useRef(null);
   const animationRef = useRef(null);
 
+
   const formatAddress = (address) =>
     address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "";
 
+ 
   const copyToClipboard = async (text, type) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -46,103 +45,38 @@ const GameBuild = ({ isWalletConnected = false, sendTransaction }) => {
     }
   };
 
+  // Entry fee transaction and game initiation
   const initgame = async () => {
     if (!isWalletConnected || !publicKey || isProcessing) return;
 
     setIsProcessing(true);
     try {
-       
-        if (!HOUSE_ADDRESS) {
-            throw new Error("House address is not configured");
-        }
+      // Entry fee transaction: send a small amount of SOL to the persistent house wallet
+      const transaction = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: publicKey,
+          toPubkey: new PublicKey(HOUSE_ADDRESS),
+          lamports: 0.001 * LAMPORTS_PER_SOL, // 0.001 SOL entry fee
+        })
+      );
 
-        console.log("Requesting nonce...");
-       
-        let nonceData;
-        try {
-            const response = await axios.post(
-                `${BACKEND_URL}/api/get-nonce`,
-                {},
-                {
-                    headers: {
-                        "Content-Type": "application/json",
-                        Authorization: "Bearer solanafruitninja",
-                    },
-                }
-            );
-            nonceData = response.data;
-            if (!nonceData.success) throw new Error("Failed to get nonce");
-        } catch (error) {
-            console.error("API error getting nonce:", error);
-            throw new Error("Could not connect to game server");
-        }
+      // Send transaction
+      const txSig = await sendTransaction(transaction, connection);
+      console.log("Entry fee paid:", txSig);
+      await connection.confirmTransaction(txSig);
 
-        console.log("Nonce received, signing message...");
-        const message = `verify wallet ${nonceData.nonce}`;
-        const messageBytes = new TextEncoder().encode(message);
-        
-        let signature;
-        try {
-            signature = await signMessage(messageBytes);
-        } catch (error) {
-            console.error("Signing error:", error);
-            throw new Error("Failed to sign message with wallet");
-        }
-
-        console.log("Message signed, verifying wallet...");
-        let verifyData;
-        try {
-            const response = await axios.post(
-                `${BACKEND_URL}/api/verify-wallet`,
-                {
-                    signature: Buffer.from(signature).toString("base64"),
-                    publicKey: publicKey.toString(),
-                    message,
-                    nonce: nonceData.nonce,
-                },
-                { headers: { "Content-Type": "application/json" } }
-            );
-            verifyData = response.data;
-            if (!verifyData.success) throw new Error("Verification failed");
-        } catch (error) {
-            console.error("API error verifying wallet:", error);
-            throw new Error("Could not verify wallet with server");
-        }
-
-        localStorage.setItem("gameToken", verifyData.token);
-
-        console.log("Creating transaction...");
-        
-        try {
-            const housePubkey = new PublicKey(HOUSE_ADDRESS);
-            const transaction = new Transaction().add(
-                SystemProgram.transfer({
-                    fromPubkey: publicKey,
-                    toPubkey: housePubkey,
-                    lamports: 0.01 * LAMPORTS_PER_SOL,
-                })
-            );
-
-            console.log("Sending transaction...");
-            const txSig = await sendTransaction(transaction, connection);
-            console.log("Confirming transaction...");
-            await connection.confirmTransaction(txSig);
-        } catch (error) {
-            console.error("Transaction error:", error);
-            throw new Error("Failed to process game entry transaction");
-        }
-
-        console.log("Game started successfully!");
-        setgamestate({ score: 0, lives: 3, isPlaying: true });
-        setcurrentscreen("game");
+      // Start the game
+      setgamestate({ score: 0, lives: 3, isPlaying: true });
+      setcurrentscreen("game");
     } catch (error) {
-        console.error("Game initialization error:", error);
-        alert(`Error initializing game: ${error.message}`);
+      console.error("Game initialization error:", error);
+      alert(`Error: ${error.message}. Make sure you have enough SOL for the entry fee.`);
     } finally {
-        setIsProcessing(false);
+      setIsProcessing(false);
     }
-};
+  };
 
+ 
   useEffect(() => {
     if (currentscreen === "game" && canvasRef.current) {
       const canvas = canvasRef.current;
@@ -152,16 +86,21 @@ const GameBuild = ({ isWalletConnected = false, sendTransaction }) => {
       canvas.width = rect.width;
       canvas.height = rect.height;
 
-      if (gameinstanceRef.current) gameinstanceRef.current.stop();
+      if (gameinstanceRef.current) {
+        gameinstanceRef.current.stop();
+      }
 
       gameinstanceRef.current = new GameLogic(canvas, ctx);
       gameinstanceRef.current.start();
 
-      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
 
       gameLoop();
     }
   }, [currentscreen]);
+
 
   const gameLoop = () => {
     if (!gamestate.isPlaying || !gameinstanceRef.current) return;
@@ -187,6 +126,7 @@ const GameBuild = ({ isWalletConnected = false, sendTransaction }) => {
     animationRef.current = requestAnimationFrame(gameLoop);
   };
 
+
   const gameOver = async () => {
     setgamestate((prev) => ({ ...prev, isPlaying: false }));
     if (gameinstanceRef.current) gameinstanceRef.current.stop();
@@ -195,10 +135,10 @@ const GameBuild = ({ isWalletConnected = false, sendTransaction }) => {
 
     if (publicKey && gamestate.score > 0) {
       setrewardStaus({ loading: true, success: false, error: null });
-
       try {
         const rewardAmount = getSliceReward(gamestate.score);
         if (rewardAmount > 0) {
+         
           await transferTokens(connection, publicKey, publicKey, rewardAmount);
           setrewardStaus({ loading: false, success: true, error: null });
         }
@@ -209,6 +149,7 @@ const GameBuild = ({ isWalletConnected = false, sendTransaction }) => {
     }
   };
 
+  // Handle canvas resizing
   useEffect(() => {
     const handleResize = () => {
       if (!canvasRef.current) return;
@@ -227,23 +168,14 @@ const GameBuild = ({ isWalletConnected = false, sendTransaction }) => {
 
   const handleClaim = async () => {
     if (!publicKey || !gamestate.score) return;
-
+  
     setIsClaimProcessing(true);
     setrewardStaus({ loading: true, success: false, error: null });
-
+  
     try {
-      const rewardAmount = getSliceReward(gamestate.score);
-      if (rewardAmount > 0) {
-        await transferTokens(connection, publicKey, publicKey, rewardAmount);
-        setIsClaimed(true);
-        setrewardStaus({ loading: false, success: true, error: null });
-      } else {
-        setrewardStaus({
-          loading: false,
-          success: false,
-          error: "Score too low to claim reward",
-        });
-      }
+      await transferTokens(publicKey.toBase58(), gamestate.score); 
+      setIsClaimed(true);
+      setrewardStaus({ loading: false, success: true, error: null });
     } catch (error) {
       console.error(error);
       setrewardStaus({ loading: false, success: false, error: error.message });
@@ -261,7 +193,7 @@ const GameBuild = ({ isWalletConnected = false, sendTransaction }) => {
   };
 
   return (
-    <div className="w-full max-w-4xl mx-auto">
+    <div className="w-full mx-auto container">
       <div className="mb-4 w-full">
         <div className="flex flex-col sm:flex-row justify-between bg-black bg-opacity-30 p-4 rounded-xl">
           <div className="mb-2 sm:mb-0">
@@ -276,18 +208,6 @@ const GameBuild = ({ isWalletConnected = false, sendTransaction }) => {
               </button>
             </div>
           </div>
-          <div>
-            <span className="text-sm text-gray-300">Contract Address:</span>
-            <div className="flex items-center gap-2">
-              <span className="text-yellow-300">{formatAddress(CONTRACT_ADDRESS)}</span>
-              <button
-                onClick={() => copyToClipboard(CONTRACT_ADDRESS, "contract")}
-                className="text-green-400 hover:text-green-200 transition-colors duration-200"
-              >
-                {copystatus.contract ? "✓" : "📋"}
-              </button>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -297,24 +217,17 @@ const GameBuild = ({ isWalletConnected = false, sendTransaction }) => {
             <h1 className="text-5xl font-pixel mb-4 text-yellow-400 drop-shadow-lg relative z-10">
               Fruity Slice
             </h1>
-            <div className="absolute -top-6 -right-6 text-5xl animate-bounce">
-              🍉
-            </div>
-            <div className="absolute -bottom-6 -left-6 text-5xl animate-bounce" style={{ animationDelay: '0.5s' }}>
-              🍎
-            </div>
+            <div className="absolute -top-6 -right-6 text-5xl animate-bounce">🍉</div>
+            <div className="absolute -bottom-6 -left-6 text-5xl animate-bounce" style={{ animationDelay: '0.5s' }}>🍎</div>
           </div>
-          
           <h2 className="text-2xl font-pixel text-yellow-300 mb-6">Ready to Slice?</h2>
-          
           <button
             onClick={initgame}
             disabled={!isWalletConnected || isProcessing}
-            className="px-10 py-4 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 rounded-xl font-pixel text-xl shadow-xl transform transition-all duration-300 hover:scale-105 hover:cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:from-gray-500 disabled:to-gray-600"
+            className="px-10 py-4 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 rounded-xl font-pixel text-xl shadow-xl transform transition-all duration-300 hover:scale-105 hover:cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isProcessing ? "Processing..." : "Start Slicing!"}
           </button>
-          
           {!isWalletConnected && (
             <p className="text-lg text-yellow-200 mt-4 bg-black bg-opacity-50 p-4 rounded-lg">
               Connect your wallet to play and earn rewards!
@@ -331,18 +244,9 @@ const GameBuild = ({ isWalletConnected = false, sendTransaction }) => {
           </div>
           <div className="relative">
             <canvas ref={canvasRef} className="w-full h-[500px] border-4 border-yellow-500 rounded-lg shadow-lg" />
-            
-            {/* Fruit decorations */}
             <div className="absolute -bottom-6 left-0 right-0 flex justify-evenly">
               {['🍎', '🍓', '🍊', '🍋', '🍉', '🍇'].map((fruit, index) => (
-                <div 
-                  key={index}
-                  className="text-2xl animate-bounce" 
-                  style={{ 
-                    animationDuration: `${1 + Math.random() * 2}s`,
-                    animationDelay: `${Math.random() * 1}s`
-                  }}
-                >
+                <div key={index} className="text-2xl animate-bounce" style={{ animationDuration: `${1 + Math.random() * 2}s`, animationDelay: `${Math.random() * 1}s` }}>
                   {fruit}
                 </div>
               ))}
@@ -354,11 +258,9 @@ const GameBuild = ({ isWalletConnected = false, sendTransaction }) => {
       {currentscreen === "gameOver" && (
         <div className="text-center bg-black bg-opacity-50 p-8 rounded-xl shadow-xl">
           <h2 className="text-3xl font-bold text-yellow-400 mb-4 font-pixel">Game Over</h2>
-          
           <div className="mb-6 bg-black bg-opacity-40 p-4 rounded-lg inline-block">
             <p className="text-xl">Final Score: <span className="text-yellow-300 font-bold">{gamestate.score}</span></p>
           </div>
-          
           <div className="mb-6">
             {rewardstatus.loading && (
               <p className="text-blue-300 flex items-center justify-center gap-2">
@@ -376,13 +278,12 @@ const GameBuild = ({ isWalletConnected = false, sendTransaction }) => {
               </p>
             )}
           </div>
-          
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             {!isClaimed ? (
               <button
                 onClick={handleClaim}
                 disabled={isClaimProcessing}
-                className="px-8 py-3 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 rounded-xl font-pixel text-lg shadow-xl transform transition-all duration-300 hover:scale-105 disabled:opacity-50 disabled:hover:scale-100"
+                className="px-8 py-3 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 rounded-xl font-pixel text-lg shadow-xl transform transition-all duration-300 hover:scale-105 disabled:opacity-50"
               >
                 {isClaimProcessing ? "Claiming..." : "Claim Reward"}
               </button>
@@ -395,27 +296,17 @@ const GameBuild = ({ isWalletConnected = false, sendTransaction }) => {
               </button>
             )}
           </div>
-          
           <div className="mt-8 flex justify-center">
             <div className="flex gap-6">
               {['🍎', '🍓', '🍊', '🍋', '🍉', '🍇'].map((fruit, index) => (
-                <div 
-                  key={index}
-                  className="text-3xl animate-bounce" 
-                  style={{ 
-                    animationDuration: `${1 + Math.random() * 2}s`,
-                    animationDelay: `${Math.random() * 1}s`
-                  }}
-                >
+                <div key={index} className="text-3xl animate-bounce" style={{ animationDuration: `${1 + Math.random() * 2}s`, animationDelay: `${Math.random() * 1}s` }}>
                   {fruit}
                 </div>
               ))}
             </div>
           </div>
         </div>
-
       )}
-      
     </div>
   );
 };
