@@ -1,54 +1,113 @@
-# React + TypeScript + Vite
+# 🍉 Fruity Slice Token Game on Solana (Devnet)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A fun, blockchain-integrated Fruit Ninja-style game built using React (JSX) and powered by the Solana blockchain. Players slash fruits to earn tokens based on their score. Tokens are distributed from a house wallet through a backend server using a secure claim system.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## 📁 Tech Stack
 
-## Expanding the ESLint configuration
+- **Frontend**: React (JSX)
+- **Backend**: Node.js (Express via `server.js`)
+- **Blockchain**: Solana 
+- **Token**: Custom SPL Token
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+---
 
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+## 🚀 Features
+
+- 🍉 Fruit Ninja-style gameplay
+- 🔐 JWT-secured score submission & token claim
+- 💰 Token rewards based on score tiers
+- 💸 Airdrops from a House Wallet
+- 🌐 Solana Devnet integration
+
+---
+
+## ⚙️ Setup Instructions
+
+### 1. Clone the repository
+```bash
+git clone https://github.com/Anantdadhich/fruityslice.git
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default tseslint.config({
-  plugins: {
-    // Add the react-x and react-dom plugins
-    'react-x': reactX,
-    'react-dom': reactDom,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended typescript rules
-    ...reactX.configs['recommended-typescript'].rules,
-    ...reactDom.configs.recommended.rules,
-  },
-})
+### 2. Install dependencies
+```bash
+npm install
 ```
+
+### 3. Create your `.env` file
+Create a `.env` file in the root of your project and fill in:
+```env
+PAYER_WALLET=your_base58_encoded_secret_key
+JWT_SECRET=your_jwt_secret
+JWT_EXPIRY=1h
+AUTH_TOKEN=static_auth_token_if_applicable
+VITE_BACKEND=http://localhost:3001
+```
+
+### 4. Run the Solana setup (Devnet)
+Run your wallet/token setup script to generate:
+- ✅ House Wallet Address
+- ✅ Token Mint Address
+- ✅ House Token Account
+
+Save those and update the frontend/backend with:
+```js
+const TOKEN_MINT = new PublicKey("your_token_mint");
+const PAYER = Keypair.fromSecretKey(bs58.decode(process.env.PAYER_WALLET));
+const HOUSE_WALLET = PAYER.publicKey;
+```
+
+---
+
+## 🧠 Game Logic (Frontend)
+
+- The frontend renders the Fruit Ninja game
+- Player score is tracked
+- On game over, players can **claim rewards**
+- `handleClaim()` sends the score to the backend, which validates it, calculates rewards, and triggers a token transfer
+
+---
+
+## 🛠 Backend (`server.js`)
+
+Handles:
+- ✅ JWT authentication
+- ✅ `POST /api/login` — returns JWT token
+- ✅ `POST /api/transfer-tokens` — transfers SPL tokens to player’s wallet based on score
+
+Uses:
+- `@solana/web3.js` to interact with Devnet
+- JWT for session security
+- In-memory `specialrewardClaimed` for limited bonus rewards
+
+---
+
+## 🎮 Reward System
+```js
+export const getSliceReward = (score) => {
+  if (score < 10) return 0;
+  if (score < 20) return 0.005 * LAMPORTS_PER_SOL;
+  if (score < 50) return 0.01 * LAMPORTS_PER_SOL;
+  if (score < 100) return 0.03 * LAMPORTS_PER_SOL;
+  return 0.05 * LAMPORTS_PER_SOL;
+};
+```
+
+---
+
+## 💡 Notes
+
+- Everything runs on **Solana Devnet**, no real SOL involved.
+- Make sure to fund your house wallet with devnet SOL using:
+```bash
+solana airdrop 2 <house_wallet_address> --url devnet
+```
+
+---
+
+## 📩 Contact
+Made by Anant — Full Stack Developer experimenting with blockchain gaming on Solana.
+
+Feel free to reach out or contribute!
+

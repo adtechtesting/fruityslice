@@ -46,20 +46,20 @@ app.use(express.json());
 // Apply rate limiting to all routes
 app.use(limiter);
 
-function getSliceRewards(score,playerAddress){
-    if(score >=1000 && !specialrewardClaimed.has(playerAddress)){
-      specialrewardClaimed.add(playerAddress)
-      return 50000
-    }
-    if (score < 10) return 0; // Minimum score required
-    if (score < 20) return 0.005 * LAMPORTS_PER_SOL; // 0.005 SOL
-    if (score < 50) return 0.01 * LAMPORTS_PER_SOL; // 0.01 SOL
-    if (score < 100) return 0.03 * LAMPORTS_PER_SOL; // 0.03 SOL
-    return 0.05 * LAMPORTS_PER_SOL; // 0.05 SOL for top scores
-
+function getSliceRewards(score, playerAddress) {
+  // Special reward for high scores (only once per address)
+  if (score >= 1000 && !specialrewardClaimed.has(playerAddress)) {
+    specialrewardClaimed.add(playerAddress);
+    return 0.05; // This is 0.05 token units
+  }
   
+  // Regular rewards based on score
+  if (score < 10) return 0 *LAMPORTS_PER_SOL; // Minimum score required
+  if (score < 20) return 0.005 *LAMPORTS_PER_SOL; // 0.005 tokens
+  if (score < 50) return 0.01 *LAMPORTS_PER_SOL; // 0.01 tokens
+  if (score < 100) return 0.03 *LAMPORTS_PER_SOL; // 0.03 tokens
+  return 0.05 *LAMPORTS_PER_SOL; // 0.05 tokens for top scores
 }
-
  
 
 async function getorCreateAssociatedTokenAccount(owner){
@@ -101,8 +101,83 @@ return associatedtoken
   }
 }
 
+// login user logic
+function cleanExpiredNonces() {
+  const now = Date.now();
+  for (const [key, value] of noncestore.entries()) {
+    if (now - value.timestamp > EXPIRY_TIME_NOUNCE) {
+      noncestore.delete(key);
+    }
+  }
+}
 
+// Clean expired nonces periodically
+setInterval(cleanExpiredNonces, 60000);
 
+// Login endpoint
+app.post('/api/login', async (req, res) => {
+  try {
+    const { walletAddress, signature, message } = req.body;
+    
+    if (!walletAddress || !signature || !message) {
+      return res.status(400).json({ error: 'Missing required fields: walletAddress, signature, or message' });
+    }
+    
+    // Validate wallet address format
+    try {
+      new PublicKey(walletAddress);
+    } catch (error) {
+      return res.status(400).json({ error: 'Invalid wallet address format' });
+    }
+    
+    try {
+      // Verify signature
+      const publicKey = new PublicKey(walletAddress);
+      const messageBytes = new TextEncoder().encode(message);
+      
+      // Convert base64 signature to bytes
+      let signatureBytes;
+      try {
+        signatureBytes = Buffer.from(signature, 'base64');
+      } catch (error) {
+        return res.status(400).json({ error: 'Invalid signature format (must be base64)' });
+      }
+      
+      // Verify the signature
+      const verified = nacl.sign.detached.verify(
+        messageBytes,
+        signatureBytes,
+        publicKey.toBytes()
+      );
+      
+      if (!verified) {
+        console.log('Failed signature verification for wallet:', walletAddress);
+        return res.status(401).json({ error: 'Invalid signature' });
+      }
+      
+      // Generate JWT token
+      const token = jwt.sign(
+        { walletAddress },
+        JWT_SECRET,
+        { expiresIn: JWT_EXPIRY || '24h' }
+      );
+      
+      // Send token back to client
+      res.json({
+        success: true,
+        token,
+        expiresIn: JWT_EXPIRY || '24h'
+      });
+      
+    } catch (error) {
+      console.error('Signature verification error:', error);
+      res.status(400).json({ error: 'Invalid wallet address or signature: ' + error.message });
+    }
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'Server error during login: ' + error.message });
+  }
+});
 
 app.post("/api/transfer-tokens",async (req,res)=>{
   
@@ -136,6 +211,7 @@ app.post("/api/transfer-tokens",async (req,res)=>{
     }
 
     const player=new PublicKey(playerAddress);
+    
     const amount=getSliceRewards(score,playerAddress);
 
     
